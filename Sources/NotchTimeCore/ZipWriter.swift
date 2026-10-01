@@ -17,9 +17,20 @@ struct ZipWriter {
 
     init(date: Date = Date()) {
         let c = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        let year = max(1980, c.year ?? 1980)
-        dosDate = UInt16(((year - 1980) << 9) | ((c.month ?? 1) << 5) | (c.day ?? 1))
-        dosTime = UInt16(((c.hour ?? 0) << 11) | ((c.minute ?? 0) << 5) | ((c.second ?? 0) / 2))
+        let year: Int = max(1980, c.year ?? 1980)
+        let month: Int = c.month ?? 1
+        let day: Int = c.day ?? 1
+        let hour: Int = c.hour ?? 0
+        let minute: Int = c.minute ?? 0
+        let second: Int = c.second ?? 0
+        var d: Int = (year - 1980) << 9
+        d |= month << 5
+        d |= day
+        var t: Int = hour << 11
+        t |= minute << 5
+        t |= second / 2
+        dosDate = UInt16(truncatingIfNeeded: d)
+        dosTime = UInt16(truncatingIfNeeded: t)
     }
 
     mutating func add(_ name: String, _ data: Data) {
