@@ -77,7 +77,7 @@ final class ReportExporterTests: XCTestCase {
     func testSheetXMLContainsExpectedCells() {
         let f = septemberFixture()
         let groups = ReportExporter.groups(entries: f.entries, clients: f.clients)
-        let xml = ReportExporter.sheetXML(groups: groups, range: f.range)
+        let xml = ReportExporter.sheetXML(groups: groups, range: f.range, calendar: cal)
         XCTAssertTrue(xml.contains("<t xml:space=\"preserve\">Total DavidF (Solestra)</t>"))
         XCTAssertTrue(xml.contains("<t xml:space=\"preserve\">Total (01/09/2026 - 30/09/2026)</t>"))
         XCTAssertTrue(xml.contains("<t xml:space=\"preserve\">30:32:38</t>"))
@@ -87,14 +87,14 @@ final class ReportExporterTests: XCTestCase {
 
     func testWorkbookIsZipAndWrittenForInspection() throws {
         let f = septemberFixture()
-        let data = ReportExporter.workbook(entries: f.entries, clients: f.clients, range: f.range)
+        let data = ReportExporter.workbook(entries: f.entries, clients: f.clients, range: f.range, calendar: cal)
         XCTAssertGreaterThan(data.count, 2000)
         XCTAssertEqual(Array(data.prefix(4)), [0x50, 0x4B, 0x03, 0x04])
 
         // Written so CI can upload it and a human (or openpyxl) can open it.
         let dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let name = ReportExporter.suggestedFilename(reportName: "Radomyr", range: f.range)
+        let name = ReportExporter.suggestedFilename(reportName: "Radomyr", range: f.range, calendar: cal)
         XCTAssertEqual(name, "Time_Report_Summary_Radomyr_01_09_2026-30_09_2026.xlsx")
         try data.write(to: dir.appendingPathComponent("test-export.xlsx"))
     }

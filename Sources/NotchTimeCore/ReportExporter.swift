@@ -80,7 +80,7 @@ public enum ReportExporter {
 
     // MARK: - Workbook
 
-    public static func workbook(entries: [TimeEntry], clients: [Client], range: DateInterval, now: Date = Date()) -> Data {
+    public static func workbook(entries: [TimeEntry], clients: [Client], range: DateInterval, now: Date = Date(), calendar: Calendar = .current) -> Data {
         let gs = groups(entries: entries, clients: clients, now: now)
         var zip = ZipWriter(date: now)
         zip.add("[Content_Types].xml", Data(contentTypes.utf8))
@@ -88,20 +88,22 @@ public enum ReportExporter {
         zip.add("xl/workbook.xml", Data(workbookXML.utf8))
         zip.add("xl/_rels/workbook.xml.rels", Data(workbookRels.utf8))
         zip.add("xl/styles.xml", Data(stylesXML.utf8))
-        zip.add("xl/worksheets/sheet1.xml", Data(sheetXML(groups: gs, range: range).utf8))
+        zip.add("xl/worksheets/sheet1.xml", Data(sheetXML(groups: gs, range: range, calendar: calendar).utf8))
         return zip.finish()
     }
 
-    public static func suggestedFilename(reportName: String, range: DateInterval) -> String {
+    public static func suggestedFilename(reportName: String, range: DateInterval, calendar: Calendar = .current) -> String {
         let name = reportName.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: " ", with: "_")
-        let (from, to) = rangeLabels(range, separator: "_")
+        let (from, to) = rangeLabels(range, separator: "_", calendar: calendar)
         let prefix = name.isEmpty ? "Time_Report_Summary" : "Time_Report_Summary_\(name)"
         return "\(prefix)_\(from)-\(to).xlsx"
     }
 
-    static func rangeLabels(_ range: DateInterval, separator: String) -> (String, String) {
+    static func rangeLabels(_ range: DateInterval, separator: String, calendar: Calendar) -> (String, String) {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = calendar
+        f.timeZone = calendar.timeZone
         f.dateFormat = "dd\(separator)MM\(separator)yyyy"
         let last = range.end.addingTimeInterval(-1)
         return (f.string(from: range.start), f.string(from: last))
@@ -109,7 +111,7 @@ public enum ReportExporter {
 
     // MARK: - Sheet
 
-    static func sheetXML(groups: [Group], range: DateInterval) -> String {
+    static func sheetXML(groups: [Group], range: DateInterval, calendar: Calendar = .current) -> String {
         var rows: [String] = []
         var r = 1
 
@@ -147,7 +149,7 @@ public enum ReportExporter {
             totalAmount += g.amount ?? 0
         }
 
-        let (from, to) = rangeLabels(range, separator: "/")
+        let (from, to) = rangeLabels(range, separator: "/", calendar: calendar)
         row([s("A", "Total (\(from) - \(to))", 1), blank("B", 1), s("C", DurationFormat.hms(totalSeconds), 5), n("D", DurationFormat.decimalHours(totalSeconds), 6), n("E", (totalAmount * 100).rounded() / 100, 8)])
 
         return """
