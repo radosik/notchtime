@@ -42,13 +42,13 @@ struct IslandRootView: View {
 
         ZStack(alignment: .top) {
             IslandShape(radius: radius)
-                .fill(Theme.surface)
+                .fill(Theme.islandSurface)
                 .overlay(
                     IslandShape(radius: radius)
                         .strokeBorder(Theme.edge, lineWidth: 0.6)
                         .opacity(expanded ? 1 : 0)
                 )
-                .shadow(color: Color.black.opacity(expanded ? 0.55 : 0.0), radius: 22, x: 0, y: 12)
+                .shadow(color: Color.black.opacity(expanded ? 0.6 : 0.0), radius: 22, x: 0, y: 12)
 
             if expanded {
                 ExpandedIsland(store: store, model: model, actions: actions)
@@ -113,70 +113,64 @@ struct ExpandedIsland: View {
     var body: some View {
         let m = model.metrics
         VStack(spacing: 0) {
-            // Row level with the notch: controls live left and right of it.
-            HStack(spacing: 0) {
-                HStack {
-                    ClientMenu(store: store, model: model)
-                    Spacer(minLength: 0)
-                }
-                .padding(.leading, 16)
-                .frame(width: (m.expandedWidth - m.notchWidth) / 2)
+            // The notch itself: nothing lives here, so nothing hugs the screen edge.
+            Color.clear.frame(width: m.expandedWidth, height: m.notchHeight)
 
-                Color.clear.frame(width: m.notchWidth)
-
-                HStack {
-                    Spacer(minLength: 0)
-                    MoreMenu(actions: actions)
-                }
-                .padding(.trailing, 16)
-                .frame(width: (m.expandedWidth - m.notchWidth) / 2)
-            }
-            .frame(width: m.expandedWidth, height: m.notchHeight)
-
-            VStack(spacing: 10) {
-                Text(timerText)
-                    .font(.system(size: 44, weight: .light, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(running != nil ? Theme.text : Theme.textFaint)
-                    .padding(.top, 8)
-
-                GhostField(placeholder: "What are you working on?",
-                           text: $model.draftTitle,
-                           font: .system(size: 15, weight: .medium, design: .rounded)) {
-                    if running == nil { start() }
-                }
-                .focused($titleFocused)
-                .padding(.horizontal, 36)
-                .onChange(of: model.draftTitle) { _, new in
-                    if running != nil { store.updateRunning(title: new) }
-                }
-
+            HStack {
+                ClientMenu(store: store, model: model)
                 Spacer(minLength: 0)
-
-                HStack(alignment: .center, spacing: 10) {
-                    if let r = running {
-                        StartedAt(entry: r, model: model, store: store)
-                    } else {
-                        RecentChips(store: store, restart: restart)
-                    }
-                    Spacer(minLength: 8)
-                    if running != nil {
-                        Button(action: stop) {
-                            Label("Stop", systemImage: "stop.fill")
-                        }
-                        .buttonStyle(PillowButtonStyle(tint: .tongue))
-                    } else {
-                        Button(action: start) {
-                            Label("Start", systemImage: "play.fill")
-                        }
-                        .buttonStyle(PillowButtonStyle(tint: .cloud))
-                    }
-                }
-                .padding(.horizontal, 22)
-                .padding(.bottom, 20)
+                MoreMenu(actions: actions)
             }
-            .frame(width: m.expandedWidth, height: m.expandedBodyHeight)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .frame(height: 38)
+
+            Text(timerText)
+                .font(.system(size: 40, weight: .light, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(running != nil ? Theme.text : Theme.textFaint)
+                .padding(.top, 4)
+
+            GhostField(placeholder: "What are you working on?",
+                       text: $model.draftTitle,
+                       font: .system(size: 14.5, weight: .medium, design: .rounded)) {
+                if running == nil { start() }
+            }
+            .focused($titleFocused)
+            .padding(.horizontal, 36)
+            .padding(.top, 2)
+            .onChange(of: model.draftTitle) { _, new in
+                if running != nil { store.updateRunning(title: new) }
+            }
+
+            HStack(alignment: .center, spacing: 10) {
+                if let r = running {
+                    StartedAt(entry: r, model: model, store: store)
+                } else {
+                    RecentChips(store: store, restart: restart)
+                }
+                Spacer(minLength: 8)
+                if running != nil {
+                    Button(action: stop) {
+                        Image(systemName: "stop.fill")
+                            .frame(width: 20)
+                    }
+                    .buttonStyle(PillowButtonStyle(tint: .tongue, size: 13, horizontal: 20, vertical: 8))
+                    .help("Stop")
+                } else {
+                    Button(action: start) {
+                        Image(systemName: "play.fill")
+                            .frame(width: 20)
+                    }
+                    .buttonStyle(PillowButtonStyle(tint: .cloud, size: 13, horizontal: 20, vertical: 8))
+                    .help("Start")
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 12)
+            .padding(.bottom, 14)
         }
+        .frame(width: m.expandedWidth, height: m.expandedHeight, alignment: .top)
         .onAppear {
             model.startText = ""
             model.isEditingStart = false

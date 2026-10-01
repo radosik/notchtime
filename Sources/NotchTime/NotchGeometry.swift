@@ -10,8 +10,8 @@ struct NotchMetrics: Equatable {
 
     /// Width of the text area on each side of the notch when the compact timer is showing.
     var sideWidth: CGFloat { 118 }
-    var expandedWidth: CGFloat { 480 }
-    var expandedBodyHeight: CGFloat { 240 }
+    var expandedWidth: CGFloat { 440 }
+    var expandedBodyHeight: CGFloat { 176 }
 
     var collapsedIdleWidth: CGFloat { notchWidth }
     var collapsedRunningWidth: CGFloat { notchWidth + sideWidth * 2 }

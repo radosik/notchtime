@@ -13,7 +13,7 @@ final class WindowManager {
     }
 
     func showHistory() {
-        show(key: "history", title: "History", size: CGSize(width: 600, height: 680)) {
+        show(key: "history", title: "History", size: CGSize(width: 1040, height: 640)) {
             HistoryView(store: store,
                         export: { [weak self] month in self?.export(month: month) },
                         restart: { [weak self] e in
@@ -23,12 +23,12 @@ final class WindowManager {
     }
 
     func showSettings() {
-        show(key: "settings", title: "Settings", size: CGSize(width: 560, height: 420)) {
+        show(key: "settings", title: "Settings", size: CGSize(width: 560, height: 300), fitToContent: true) {
             SettingsView(store: store)
         }
     }
 
-    private func show<V: View>(key: String, title: String, size: CGSize, @ViewBuilder content: () -> V) {
+    private func show<V: View>(key: String, title: String, size: CGSize, fitToContent: Bool = false, @ViewBuilder content: () -> V) {
         let window: NSWindow
         if let existing = windows[key] {
             window = existing
@@ -43,8 +43,16 @@ final class WindowManager {
             window.appearance = NSAppearance(named: .darkAqua)
             window.backgroundColor = NSColor(srgbRed: 0x17 / 255, green: 0x19 / 255, blue: 0x1D / 255, alpha: 1)
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: content())
-            window.setFrameAutosaveName("NotchTime.\(key)")
+            let hosting = NSHostingView(rootView: content())
+            window.contentView = hosting
+            if fitToContent {
+                window.styleMask.remove(.resizable)
+                var fit = hosting.fittingSize
+                fit.height += 28   // title bar lives inside the content view (fullSizeContentView)
+                window.setContentSize(fit)
+            } else {
+                window.setFrameAutosaveName("NotchTime.\(key)")
+            }
             window.center()
             windows[key] = window
         }

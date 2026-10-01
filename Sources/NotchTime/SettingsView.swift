@@ -7,63 +7,69 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            section("Name on reports") {
-                TextField("Radomyr", text: Binding(get: { store.reportName }, set: { store.reportName = $0 }))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 220)
-                Text("Used in the export file name: Time_Report_Summary_<name>_01_09_2026-30_09_2026.xlsx")
-                    .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(Theme.textFaint)
-            }
-
-            section("Clients") {
-                VStack(spacing: 8) {
-                    HStack {
-                        Text("Client").frame(width: 120, alignment: .leading)
-                        Text("$/hour").frame(width: 70, alignment: .leading)
-                        Text("Projects (comma separated)").frame(maxWidth: .infinity, alignment: .leading)
-                        Color.clear.frame(width: 24)
-                    }
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Theme.textDim)
-
-                    ForEach(store.clients) { c in
-                        ClientRow(client: c, store: store)
-                    }
-
-                    HStack {
-                        TextField("New client (e.g. JOSH)", text: $newClient)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 200)
-                            .onSubmit(addClient)
-                        Button("Add", action: addClient)
-                            .buttonStyle(PillowButtonStyle(tint: .cloud, size: 12, horizontal: 14, vertical: 6))
-                            .disabled(newClient.trimmingCharacters(in: .whitespaces).isEmpty)
-                        Spacer()
-                    }
-                    .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 6) {
+                sectionTitle("Name on reports")
+                HStack(spacing: 10) {
+                    TextField("Radomyr", text: Binding(get: { store.reportName }, set: { store.reportName = $0 }))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 200)
+                    Text("→ Time_Report_Summary_\(store.reportName.isEmpty ? "…" : store.reportName)_01_09_2026-30_09_2026.xlsx")
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(Theme.textFaint)
+                        .lineLimit(1)
                 }
             }
 
-            Spacer()
+            VStack(alignment: .leading, spacing: 6) {
+                sectionTitle("Clients")
 
-            Text("Data lives in \(store.fileURL.path)")
-                .font(.system(size: 10.5, design: .monospaced))
+                HStack(spacing: 8) {
+                    Text("Client").frame(width: 150, alignment: .leading)
+                    Text("$ / hour").frame(width: 70, alignment: .leading)
+                    Text("Projects (comma separated)").frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer().frame(width: 24, height: 1)
+                }
+                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.textFaint)
+
+                VStack(spacing: 6) {
+                    ForEach(store.clients) { c in
+                        ClientRow(client: c, store: store)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    TextField("New client (e.g. JOSH)", text: $newClient)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 150)
+                        .onSubmit(addClient)
+                    Button("Add", action: addClient)
+                        .buttonStyle(PillowButtonStyle(tint: .cloud, size: 12, horizontal: 14, vertical: 5))
+                        .disabled(newClient.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Spacer()
+                }
+                .padding(.top, 4)
+            }
+
+            Text(store.fileURL.path)
+                .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(Theme.textFaint)
                 .textSelection(.enabled)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .padding(.top, 2)
         }
-        .padding(22)
-        .frame(minWidth: 520, minHeight: 380)
+        .padding(.horizontal, 22)
+        .padding(.top, 14)
+        .padding(.bottom, 18)
+        .frame(width: 560)
         .background(Theme.surface.ignoresSafeArea())
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.text)
-            content()
-        }
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .foregroundStyle(Theme.text)
     }
 
     private func addClient() {
@@ -90,10 +96,10 @@ struct ClientRow: View {
     }
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
             TextField("Name", text: $name)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 120)
+                .frame(width: 150)
             TextField("20", text: $rate)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 70)
@@ -103,10 +109,11 @@ struct ClientRow: View {
                 store.deleteClient(client.id)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(Theme.textDim)
                     .frame(width: 24, height: 24)
                     .background(Circle().fill(Color.white.opacity(0.08)))
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .help("Remove client (entries keep their time, lose the client)")

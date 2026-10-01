@@ -1,13 +1,24 @@
 import SwiftUI
 import NotchTimeCore
 
+/// Column widths shared by the header row and every entry row so they line up.
+private enum Col {
+    static let client: CGFloat = 112
+    static let project: CGFloat = 112
+    static let date: CGFloat = 104
+    static let time: CGFloat = 62
+    static let duration: CGFloat = 76
+    static let actions: CGFloat = 60
+    static let gap: CGFloat = 10
+}
+
 struct HistoryView: View {
     @ObservedObject var store: TimeStore
     let export: (Date) -> Void
     let restart: (TimeEntry) -> Void
 
     @State private var month: Date = Date()
-    @State private var editing: TimeEntry?
+    @State private var pendingDelete: TimeEntry?
 
     private var calendar: Calendar { Calendar.current }
     private var range: DateInterval { calendar.dateInterval(of: .month, for: month)! }
@@ -49,8 +60,12 @@ struct HistoryView: View {
         VStack(spacing: 0) {
             header
                 .padding(.horizontal, 22)
-                .padding(.top, 18)
-                .padding(.bottom, 14)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
+
+            columnHeader
+                .padding(.horizontal, 22 + 14)
+                .padding(.bottom, 6)
 
             if monthEntries.isEmpty {
                 Spacer()
@@ -60,12 +75,11 @@ struct HistoryView: View {
                 Spacer()
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
+                    LazyVStack(alignment: .leading, spacing: 16) {
                         ForEach(days) { day in
                             DaySection(day: day.day, entries: day.entries, store: store,
-                                       onEdit: { editing = $0 },
                                        onRestart: restart,
-                                       onDelete: { store.delete($0.id) })
+                                       onDelete: { pendingDelete = $0 })
                         }
                     }
                     .padding(.horizontal, 22)
@@ -73,10 +87,18 @@ struct HistoryView: View {
                 }
             }
         }
-        .frame(minWidth: 520, minHeight: 420)
+        .frame(minWidth: 900, minHeight: 420)
         .background(Theme.surface.ignoresSafeArea())
-        .sheet(item: $editing) { entry in
-            EntryEditor(store: store, entry: entry)
+        .confirmationDialog(
+            "Delete this entry?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            presenting: pendingDelete
+        ) { e in
+            Button("Delete \"\(e.title.isEmpty ? "Untitled" : e.title)\"", role: .destructive) {
+                store.delete(e.id)
+            }
+        } message: { e in
+            Text(DurationFormat.hms(e.duration(now: store.now)) + " of tracked time will be removed.")
         }
     }
 
@@ -110,6 +132,21 @@ struct HistoryView: View {
         }
     }
 
+    private var columnHeader: some View {
+        HStack(spacing: Col.gap) {
+            Text("Task").frame(maxWidth: .infinity, alignment: .leading)
+            Text("Client").frame(width: Col.client, alignment: .leading)
+            Text("Project").frame(width: Col.project, alignment: .leading)
+            Text("Date").frame(width: Col.date, alignment: .leading)
+            Text("Start").frame(width: Col.time, alignment: .leading)
+            Text("End").frame(width: Col.time, alignment: .leading)
+            Text("Duration").frame(width: Col.duration, alignment: .trailing)
+            Spacer().frame(width: Col.actions, height: 1)
+        }
+        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+        .foregroundStyle(Theme.textFaint)
+    }
+
     private func shift(_ delta: Int) {
         if let d = calendar.date(byAdding: .month, value: delta, to: month) { month = d }
     }
@@ -130,7 +167,6 @@ struct DaySection: View {
     let day: Date
     let entries: [TimeEntry]
     @ObservedObject var store: TimeStore
-    let onEdit: (TimeEntry) -> Void
     let onRestart: (TimeEntry) -> Void
     let onDelete: (TimeEntry) -> Void
 
@@ -160,17 +196,12 @@ struct DaySection: View {
             }
             .padding(.horizontal, 4)
 
-            VStack(spacing: 1) {
-                ForEach(entries) { e in
-                    EntryRow(entry: e, store: store)
-                        .contentShape(Rectangle())
-                        .onTapGesture { onEdit(e) }
-                        .contextMenu {
-                            Button("Edit…") { onEdit(e) }
-                            if !e.isRunning { Button("Continue timer") { onRestart(e) } }
-                            Divider()
-                            Button("Delete", role: .destructive) { onDelete(e) }
-                        }
+            VStack(spacing: 0) {
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, e in
+                    if index > 0 {
+                        Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1).padding(.horizontal, 14)
+                    }
+                    EntryRowEditor(entry: e, store: store, onRestart: onRestart, onDelete: onDelete)
                 }
             }
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.045)))
@@ -179,195 +210,178 @@ struct DaySection: View {
     }
 }
 
-struct EntryRow: View {
+/// One entry, every field editable in place. Edits are saved as you make them.
+struct EntryRowEditor: View {
     let entry: TimeEntry
     @ObservedObject var store: TimeStore
+    let onRestart: (TimeEntry) -> Void
+    let onDelete: (TimeEntry) -> Void
 
-    private static let time: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
+    private var calendar: Calendar { Calendar.current }
+
+    // MARK: Bindings straight into the store
+
+    private var title: Binding<String> {
+        Binding(get: { entry.title },
+                set: { v in var e = entry; e.title = v; store.update(e) })
+    }
+
+    private var clientID: Binding<UUID?> {
+        Binding(get: { entry.clientID },
+                set: { id in
+                    var e = entry
+                    e.clientID = id
+                    let projects = store.client(id: id)?.projects ?? []
+                    if let p = e.project, !projects.contains(p) { e.project = nil }
+                    store.update(e)
+                })
+    }
+
+    private var project: Binding<String> {
+        Binding(get: { entry.project ?? "" },
+                set: { v in var e = entry; e.project = v.isEmpty ? nil : v; store.update(e) })
+    }
+
+    /// Changing the date moves the whole entry (start and end) to that day, keeping the clock times.
+    private var day: Binding<Date> {
+        Binding(get: { entry.start },
+                set: { newDay in
+                    var e = entry
+                    let dayStart = calendar.startOfDay(for: newDay)
+                    let length = e.end.map { $0.timeIntervalSince(e.start) }
+                    e.start = Self.combine(day: dayStart, time: e.start, calendar: calendar)
+                    if let length { e.end = e.start.addingTimeInterval(length) }
+                    if e.end == nil { e.start = min(e.start, Date()) }
+                    store.update(e)
+                })
+    }
+
+    private var startTime: Binding<Date> {
+        Binding(get: { entry.start },
+                set: { t in
+                    var e = entry
+                    let dayStart = calendar.startOfDay(for: e.start)
+                    e.start = Self.combine(day: dayStart, time: t, calendar: calendar)
+                    if e.end == nil {
+                        e.start = min(e.start, Date())
+                    } else if let end = e.end, end < e.start {
+                        e.end = e.start
+                    }
+                    store.update(e)
+                })
+    }
+
+    private var endTime: Binding<Date> {
+        Binding(get: { entry.end ?? Date() },
+                set: { t in
+                    var e = entry
+                    let dayStart = calendar.startOfDay(for: e.start)
+                    var end = Self.combine(day: dayStart, time: t, calendar: calendar)
+                    if end < e.start, let next = calendar.date(byAdding: .day, value: 1, to: end) { end = next }
+                    e.end = end
+                    store.update(e)
+                })
+    }
+
+    private static func combine(day: Date, time: Date, calendar: Calendar) -> Date {
+        let c = calendar.dateComponents([.hour, .minute], from: time)
+        return calendar.date(bySettingHour: c.hour ?? 0, minute: c.minute ?? 0, second: 0, of: day) ?? day
+    }
+
+    private var projects: [String] { store.client(id: entry.clientID)?.projects ?? [] }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            if entry.isRunning {
-                Circle().fill(Theme.tongueTop).frame(width: 6, height: 6)
-                    .shadow(color: Theme.tongueTop.opacity(0.9), radius: 4)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(entry.title.isEmpty ? "Untitled" : entry.title)
+        HStack(spacing: Col.gap) {
+            HStack(spacing: 8) {
+                if entry.isRunning {
+                    Circle().fill(Theme.tongueTop).frame(width: 6, height: 6)
+                        .shadow(color: Theme.tongueTop.opacity(0.9), radius: 4)
+                }
+                TextField("Untitled", text: title)
+                    .textFieldStyle(.plain)
                     .font(.system(size: 13.5, weight: .medium, design: .rounded))
                     .foregroundStyle(Theme.text)
-                    .lineLimit(1)
-                if let c = store.client(for: entry) {
-                    Chip(text: (entry.project.map { "\(c.name) · \($0)" }) ?? c.name)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Picker("", selection: clientID) {
+                Text("—").tag(UUID?.none)
+                ForEach(store.clients) { c in
+                    Text(c.name).tag(Optional(c.id))
                 }
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(DurationFormat.hms(entry.duration(now: store.now)))
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Theme.text)
-                Text("\(Self.time.string(from: entry.start)) – \(entry.end.map { Self.time.string(from: $0) } ?? "now")")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(Theme.textFaint)
+            .labelsHidden()
+            .frame(width: Col.client)
+
+            Picker("", selection: project) {
+                Text("—").tag("")
+                ForEach(projects, id: \.self) { p in
+                    Text(p).tag(p)
+                }
             }
+            .labelsHidden()
+            .disabled(projects.isEmpty)
+            .opacity(projects.isEmpty ? 0.35 : 1)
+            .frame(width: Col.project)
+
+            DatePicker("", selection: day, displayedComponents: .date)
+                .labelsHidden()
+                .datePickerStyle(.field)
+                .frame(width: Col.date)
+
+            DatePicker("", selection: startTime, displayedComponents: .hourAndMinute)
+                .labelsHidden()
+                .datePickerStyle(.field)
+                .frame(width: Col.time)
+
+            if entry.isRunning {
+                Text("now")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Theme.textFaint)
+                    .frame(width: Col.time, alignment: .leading)
+            } else {
+                DatePicker("", selection: endTime, displayedComponents: .hourAndMinute)
+                    .labelsHidden()
+                    .datePickerStyle(.field)
+                    .frame(width: Col.time)
+            }
+
+            Text(DurationFormat.hms(entry.duration(now: store.now)))
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Theme.text)
+                .frame(width: Col.duration, alignment: .trailing)
+
+            HStack(spacing: 4) {
+                if entry.isRunning {
+                    RowIcon(symbol: "stop.fill", tint: Theme.tongueTop, help: "Stop") { store.stop() }
+                } else {
+                    RowIcon(symbol: "arrow.counterclockwise", help: "Continue this task") { onRestart(entry) }
+                }
+                RowIcon(symbol: "trash", help: "Delete") { onDelete(entry) }
+            }
+            .frame(width: Col.actions, alignment: .trailing)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
     }
 }
 
-// MARK: - Editor
-
-struct EntryEditor: View {
-    @ObservedObject var store: TimeStore
-    @Environment(\.dismiss) private var dismiss
-
-    let entry: TimeEntry
-    @State private var title: String
-    @State private var clientID: UUID?
-    @State private var project: String
-    @State private var day: Date
-    @State private var startTime: Date
-    @State private var endTime: Date
-
-    init(store: TimeStore, entry: TimeEntry) {
-        self.store = store
-        self.entry = entry
-        _title = State(initialValue: entry.title)
-        _clientID = State(initialValue: entry.clientID)
-        _project = State(initialValue: entry.project ?? "")
-        _day = State(initialValue: entry.start)
-        _startTime = State(initialValue: entry.start)
-        _endTime = State(initialValue: entry.end ?? Date())
-    }
-
-    private var projects: [String] {
-        store.client(id: clientID)?.projects ?? []
-    }
-
-    private var previewDuration: TimeInterval {
-        let (s, e) = composed()
-        return max(0, (e ?? Date()).timeIntervalSince(s))
-    }
+struct RowIcon: View {
+    var symbol: String
+    var tint: Color = Theme.textDim
+    var help: String
+    var action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(entry.isRunning ? "Running timer" : "Edit entry")
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.text)
-
-            field("Task") {
-                TextField("What were you working on?", text: $title)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            HStack(spacing: 12) {
-                field("Client") {
-                    Picker("", selection: $clientID) {
-                        Text("No client").tag(UUID?.none)
-                        ForEach(store.clients) { c in
-                            Text(c.name).tag(Optional(c.id))
-                        }
-                    }
-                    .labelsHidden()
-                }
-                field("Project") {
-                    Picker("", selection: $project) {
-                        Text("No project").tag("")
-                        ForEach(projects, id: \.self) { p in
-                            Text(p).tag(p)
-                        }
-                    }
-                    .labelsHidden()
-                    .disabled(projects.isEmpty)
-                }
-            }
-            .onChange(of: clientID) { _, _ in
-                if !projects.contains(project) { project = "" }
-            }
-
-            HStack(spacing: 12) {
-                field("Date") {
-                    DatePicker("", selection: $day, displayedComponents: .date)
-                        .labelsHidden()
-                }
-                field("Start") {
-                    DatePicker("", selection: $startTime, displayedComponents: .hourAndMinute)
-                        .labelsHidden()
-                }
-                field(entry.isRunning ? "End (running)" : "End") {
-                    DatePicker("", selection: $endTime, displayedComponents: .hourAndMinute)
-                        .labelsHidden()
-                        .disabled(entry.isRunning)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("Duration")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.textDim)
-                    Text(DurationFormat.hms(previewDuration))
-                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Theme.text)
-                }
-            }
-
-            HStack {
-                Button("Delete", role: .destructive) {
-                    store.delete(entry.id)
-                    dismiss()
-                }
-                .buttonStyle(PillowButtonStyle(tint: .ghost, size: 12.5, horizontal: 14, vertical: 8))
-                Spacer()
-                Button("Cancel") { dismiss() }
-                    .buttonStyle(PillowButtonStyle(tint: .ghost, size: 12.5, horizontal: 14, vertical: 8))
-                    .keyboardShortcut(.cancelAction)
-                Button("Save") { save() }
-                    .buttonStyle(PillowButtonStyle(tint: .cloud, size: 12.5, horizontal: 18, vertical: 8))
-                    .keyboardShortcut(.defaultAction)
-            }
-            .padding(.top, 4)
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(Color.white.opacity(0.07)))
+                .contentShape(Circle())
         }
-        .padding(22)
-        .frame(width: 520)
-        .background(Theme.surface)
-    }
-
-    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.textDim)
-            content()
-        }
-    }
-
-    /// Combine the chosen day with the chosen times. Overnight entries roll the end into the next day.
-    private func composed() -> (Date, Date?) {
-        let cal = Calendar.current
-        let dayStart = cal.startOfDay(for: day)
-        func at(_ t: Date) -> Date {
-            let c = cal.dateComponents([.hour, .minute], from: t)
-            return cal.date(bySettingHour: c.hour ?? 0, minute: c.minute ?? 0, second: 0, of: dayStart) ?? dayStart
-        }
-        let start = at(startTime)
-        if entry.isRunning { return (min(start, Date()), nil) }
-        var end = at(endTime)
-        if end < start, let next = cal.date(byAdding: .day, value: 1, to: end) { end = next }
-        return (start, end)
-    }
-
-    private func save() {
-        var e = entry
-        e.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        e.clientID = clientID
-        e.project = project.isEmpty ? nil : project
-        let (s, end) = composed()
-        e.start = s
-        e.end = end
-        store.update(e)
-        dismiss()
+        .buttonStyle(.plain)
+        .help(help)
     }
 }

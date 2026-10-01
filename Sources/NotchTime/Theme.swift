@@ -10,10 +10,12 @@ extension Color {
     }
 }
 
-/// Steel black surfaces, cloudy white controls, one pink accent (the tongue).
+/// Pure black island, steel-black windows, cloudy white controls, one pink accent (the tongue).
 enum Theme {
+    static let black = Color(hex: 0x000000)
+    static let blackLift = Color(hex: 0x0B0B0C)
     static let steel = Color(hex: 0x17191D)
-    static let steelDeep = Color(hex: 0x0A0B0D)
+    static let steelDeep = Color(hex: 0x0C0D0F)
     static let steelRaised = Color(hex: 0x24272C)
     static let edge = Color.white.opacity(0.09)
     static let text = Color(hex: 0xF4F5F7)
@@ -25,6 +27,12 @@ enum Theme {
     static let tongueTop = Color(hex: 0xFF7A95)
     static let tongueBottom = Color(hex: 0xE0405F)
 
+    /// The island: #000000 at the top (merges with the notch), barely lifted at the bottom.
+    static var islandSurface: LinearGradient {
+        LinearGradient(colors: [black, black, blackLift], startPoint: .top, endPoint: .bottom)
+    }
+
+    /// History / Settings windows.
     static var surface: LinearGradient {
         LinearGradient(colors: [steel, steelDeep], startPoint: .top, endPoint: .bottom)
     }
