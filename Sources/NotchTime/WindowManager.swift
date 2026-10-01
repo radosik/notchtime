@@ -13,12 +13,12 @@ final class WindowManager {
     }
 
     func showHistory() {
-        show(key: "history", title: "History", size: CGSize(width: 1040, height: 640)) {
-            HistoryView(store: store,
-                        export: { [weak self] month in self?.export(month: month) },
-                        restart: { [weak self] e in
-                            _ = self?.store.start(title: e.title, clientID: e.clientID, project: e.project)
-                        })
+        show(key: "main", title: "NotchTime", size: CGSize(width: 1040, height: 680)) {
+            MainView(store: store,
+                     export: { [weak self] month in self?.export(month: month) },
+                     restart: { [weak self] e in
+                         _ = self?.store.start(title: e.title, clientID: e.clientID, project: e.project)
+                     })
         }
     }
 

@@ -16,6 +16,7 @@ struct HistoryView: View {
     @ObservedObject var store: TimeStore
     let export: (Date) -> Void
     let restart: (TimeEntry) -> Void
+    @Binding var page: MainPage
 
     @State private var month: Date = Date()
     @State private var pendingDelete: TimeEntry?
@@ -87,8 +88,6 @@ struct HistoryView: View {
                 }
             }
         }
-        .frame(minWidth: 900, minHeight: 420)
-        .background(Theme.surface.ignoresSafeArea())
         .confirmationDialog(
             "Delete this entry?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
@@ -104,14 +103,17 @@ struct HistoryView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
+            PageToggle(page: $page)
+
             HStack(spacing: 2) {
                 Button { shift(-1) } label: { Image(systemName: "chevron.left") }
                 Button { shift(1) } label: { Image(systemName: "chevron.right") }
             }
             .buttonStyle(RoundIconButtonStyle())
+            .padding(.leading, 6)
 
             Text(Self.monthFormatter.string(from: month))
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
                 .foregroundStyle(Theme.text)
 
             Spacer()
