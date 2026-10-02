@@ -113,9 +113,7 @@ struct ExpandedIsland: View {
     var body: some View {
         let m = model.metrics
         VStack(spacing: 0) {
-            // The notch itself: nothing lives here, so nothing hugs the screen edge.
-            Color.clear.frame(width: m.expandedWidth, height: m.notchHeight)
-
+            // Level with the notch, left and right of it; chips sit 10 pt below the screen edge.
             HStack {
                 ClientMenu(store: store, model: model)
                 Spacer(minLength: 0)
@@ -123,13 +121,13 @@ struct ExpandedIsland: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
-            .frame(height: 38)
+            .frame(width: m.expandedWidth, height: m.controlsRowHeight, alignment: .top)
 
             Text(timerText)
                 .font(.system(size: 40, weight: .light, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(running != nil ? Theme.text : Theme.textFaint)
-                .padding(.top, 4)
+                .padding(.top, 6)
 
             GhostField(placeholder: "What are you working on?",
                        text: $model.draftTitle,

@@ -131,8 +131,15 @@ struct DashboardView: View {
 
     private var entries: [TimeEntry] { store.entries(in: range) }
 
+    private static let noClient = "No client"
+
     private func clientName(_ e: TimeEntry) -> String {
-        store.client(for: e)?.name ?? "No client"
+        store.client(for: e)?.name ?? Self.noClient
+    }
+
+    /// ReportExporter labels client-less work "(No client)"; use the same label as the charts.
+    private func normalized(_ groupClientName: String) -> String {
+        groupClientName == "(No client)" ? Self.noClient : groupClientName
     }
 
     private var clientNames: [String] {
@@ -145,10 +152,6 @@ struct DashboardView: View {
         Color(hex: 0xF4F5F7), Theme.tongueTop, Color(hex: 0x6EA8FF),
         Color(hex: 0xFFC46E), Color(hex: 0x7EDBA3), Color(hex: 0xB48CFF), Color(hex: 0x8C9199)
     ]
-
-    private var colors: [Color] {
-        clientNames.indices.map { Self.palette[$0 % Self.palette.count] }
-    }
 
     private func color(for client: String) -> Color {
         guard let i = clientNames.firstIndex(of: client) else { return Theme.textDim }
@@ -188,8 +191,9 @@ struct DashboardView: View {
         let groups = ReportExporter.groups(entries: entries, clients: store.clients, now: store.now)
         var byClient: [String: (TimeInterval, Double)] = [:]
         for g in groups {
-            let cur = byClient[g.clientName] ?? (0, 0)
-            byClient[g.clientName] = (cur.0 + g.seconds, cur.1 + (g.amount ?? 0))
+            let name = normalized(g.clientName)
+            let cur = byClient[name] ?? (0, 0)
+            byClient[name] = (cur.0 + g.seconds, cur.1 + (g.amount ?? 0))
         }
         return byClient.map { Slice(client: $0.key, seconds: $0.value.0, amount: $0.value.1) }
             .sorted { $0.seconds > $1.seconds }
@@ -208,7 +212,7 @@ struct DashboardView: View {
 
     private var activities: [Activity] {
         ReportExporter.groups(entries: entries, clients: store.clients, now: store.now)
-            .flatMap { g in g.lines.map { Activity(title: $0.title, client: g.clientName, project: g.project, seconds: $0.seconds) } }
+            .flatMap { g in g.lines.map { Activity(title: $0.title, client: normalized(g.clientName), project: g.project, seconds: $0.seconds) } }
             .sorted { $0.seconds > $1.seconds }
     }
 
@@ -236,7 +240,7 @@ struct DashboardView: View {
                             if entries.isEmpty {
                                 emptyNote
                             } else {
-                                barChart.frame(height: 220)
+                                barChart.frame(height: 244)
                             }
                         }
                     }
@@ -376,34 +380,54 @@ struct DashboardView: View {
         dayCount <= 14 ? 1 : (dayCount <= 45 ? 3 : 7)
     }
 
-    private var barChart: some View {
-        Chart(dayBars) { b in
-            BarMark(x: .value("Day", b.day, unit: .day),
-                    y: .value("Hours", b.hours))
-                .foregroundStyle(by: .value("Client", b.client))
-                .cornerRadius(3)
-        }
-        .chartForegroundStyleScale(domain: clientNames, range: colors)
-        .chartXScale(domain: range.start...range.end)
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: axisStride)) { _ in
-                AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-                AxisValueLabel(format: .dateTime.day().month(.abbreviated), centered: true)
-                    .foregroundStyle(Theme.textFaint)
-            }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading) { value in
-                AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-                AxisValueLabel {
-                    if let h = value.as(Double.self) {
-                        Text(h == h.rounded() ? "\(Int(h))h" : String(format: "%.1fh", h))
-                            .foregroundStyle(Theme.textFaint)
-                    }
+    private var legend: some View {
+        HStack(spacing: 14) {
+            ForEach(clientNames, id: \.self) { name in
+                HStack(spacing: 6) {
+                    Circle().fill(color(for: name)).frame(width: 8, height: 8)
+                    Text(name)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.textDim)
                 }
             }
         }
-        .chartLegend(position: .top, alignment: .leading, spacing: 8)
+    }
+
+    private var xDomain: ClosedRange<Date> {
+        let end = max(range.end, range.start.addingTimeInterval(86_400))
+        return range.start...end
+    }
+
+    private var barChart: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            legend
+            Chart(dayBars) { b in
+                BarMark(x: .value("Day", b.day, unit: .day),
+                        y: .value("Hours", b.hours))
+                    .foregroundStyle(color(for: b.client))
+                    .cornerRadius(3)
+            }
+            .chartXScale(domain: xDomain)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day, count: axisStride)) { _ in
+                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                    AxisValueLabel(format: .dateTime.day().month(.abbreviated), centered: true)
+                        .foregroundStyle(Theme.textFaint)
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                    AxisValueLabel {
+                        if let h = value.as(Double.self) {
+                            Text(h == h.rounded() ? "\(Int(h))h" : String(format: "%.1fh", h))
+                                .foregroundStyle(Theme.textFaint)
+                        }
+                    }
+                }
+            }
+            .chartLegend(.hidden)
+        }
     }
 
     private var donut: some View {
@@ -414,9 +438,8 @@ struct DashboardView: View {
                                innerRadius: .ratio(0.64),
                                angularInset: 1.5)
                         .cornerRadius(4)
-                        .foregroundStyle(by: .value("Client", s.client))
+                        .foregroundStyle(color(for: s.client))
                 }
-                .chartForegroundStyleScale(domain: clientNames, range: colors)
                 .chartLegend(.hidden)
                 Text(DurationFormat.hms(totalSeconds))
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))

@@ -11,11 +11,14 @@ struct NotchMetrics: Equatable {
     /// Width of the text area on each side of the notch when the compact timer is showing.
     var sideWidth: CGFloat { 118 }
     var expandedWidth: CGFloat { 440 }
-    var expandedBodyHeight: CGFloat { 176 }
+    /// Row holding the client chip and the ⋯ menu; level with the notch, chips start 10 pt from the top.
+    var controlsRowHeight: CGFloat { max(notchHeight, 38) }
+    /// Everything below that row: timer, task field, buttons.
+    var expandedBodyHeight: CGFloat { 138 }
 
     var collapsedIdleWidth: CGFloat { notchWidth }
     var collapsedRunningWidth: CGFloat { notchWidth + sideWidth * 2 }
-    var expandedHeight: CGFloat { notchHeight + expandedBodyHeight }
+    var expandedHeight: CGFloat { controlsRowHeight + expandedBodyHeight }
 
     static func measure(screen: NSScreen) -> NotchMetrics {
         let inset = screen.safeAreaInsets.top
